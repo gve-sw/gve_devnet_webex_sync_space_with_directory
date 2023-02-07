@@ -99,26 +99,68 @@ def check_token_refresh(tokens):
             json.dump(tokens, json_file)
     return tokens
 
+# TODO: read email addresses from exclude_users_by_email.txt and keep those out of the group
+# TODO: read deptartment name (partial) from excluded_departments.txt y filter any users with a department whos name contains
+# any of those strings
+
 
 def main():
     global gtokens
     admin_login()
+
+    # read the list of emails of users to exclude from the space even if in directory
+    excluded_emails = []
+    with open('excluded_users_by_email.txt', 'r') as f:
+        for line in f.readlines():
+            theEmail = line.rstrip()
+            excluded_emails.append(theEmail)
+
+    # read the list of emails of users to exclude from the space even if in directory
+    excluded_departments = []
+    with open('excluded_departments.txt', 'r') as f:
+        for line in f.readlines():
+            theDept = line.rstrip()
+            excluded_departments.append(theDept)
+
+    # initialize the Webex Python SDK
     api = WebexTeamsAPI(
         access_token=gtokens['access_token'], disable_ssl_verify=DISABLE_SSL_VERIFY)
 
     # Create a set with all organization user IDs to check for space memberships
     dirSetByID = set()
 
+    # Read the entire directory
     fullDirectory = api.people.list()
-    for entry in fullDirectory:
-        # Create a dictionary entry if active user
-        if (entry.loginEnabled and not entry.invitePending):
-            dirSetByID.add(entry.id)
 
+    # Evaluate if a user should be allowed to be a member of the general space we are syncing with
+    for entry in fullDirectory:
+        # Exclude users that are not login enabled
+        if (not entry.loginEnabled):
+            print(f'Filtered out {entry.displayName}: not login enabled')
+            continue
+        # Exclude users who have a pending invite to webex messaging
+        if (entry.invitePending):
+            print(f'Filtered out {entry.displayName}: invite pending')
+            continue
+        # Exclude users who's email address is in the excluded_users_by_email.txt file
+        if hasattr(entry, 'emails') and (entry.emails[0] in excluded_emails):
+            print(f'Filtered out {entry.displayName}: excluded email address')
+            continue
+        # Exclude users who's department contains a string in the excluded_departments.txt file
+        if hasattr(entry, 'department') and any(dept in entry.department for dept in excluded_departments):
+            print(f'Filtered out {entry.displayName}: excluded department')
+            continue
+        # User passed all criteria, add to the list of users that should be in space
+        dirSetByID.add(entry.id)
+
+    # initialize the set variables to use to calculate membership additions or deletions
     spaceSetByID = set()
     membershipDictByID = {}
+
     print(
         f'Evaluating membership in space with space ID {SYNC_SPACE_ID}')
+
+    # populate the membership set (spaceSetByID) and the dict to map user IDs to membership ID for easy removing if neccesary (membershipDictByID)
     theMembershipList = api.memberships.list(roomId=SYNC_SPACE_ID)
     for aMembership in theMembershipList:
         spaceSetByID.add(aMembership.personId)
@@ -135,7 +177,7 @@ def main():
     # remove users not in the org directory from from the general space if there
     for remUser in toRemove:
         print('Removing user ID: ', remUser)
-        api.memberships.remove(membershipDictByID[remUser])
+        api.memberships.delete(membershipDictByID[remUser])
 
     # add users in the org directory that are not yet in the general space
     for addUser in toAdd:

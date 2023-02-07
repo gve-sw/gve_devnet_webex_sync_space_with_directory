@@ -69,6 +69,10 @@ of app.run() at the end of the server.py file, this should be the same value of 
 in the sample code.  
 NOTE: This URL does not actually have to map to a public IP address out on the internet.
 
+Edit the _excluded_departments.txt_ file to specify which strings in the department name of users would qualify to exclude them from the general space being syncd. You must put each string on a separate line in the file.
+
+Edit the _excluded_users_by_email.txt_ file to specify the email address of users in the corporate directory to exclude from the general space being syncd. You must put each email address on a separate line in the file.
+
 ## Usage
 
 To obtain admin token:
